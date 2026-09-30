@@ -51,12 +51,90 @@ export type ProviderResult = {
   outputs: GeneratedOutput[];
 };
 
+/**
+ * Replicate text-to-image models. Change REPLICATE_IMAGE_MODELS / DEFAULT to
+ * swap models. All listed models accept: prompt, aspect_ratio, num_outputs
+ * (1–4), megapixels, num_inference_steps, output_format. None of the FLUX
+ * models accept a negative prompt, so that control is disabled in the UI.
+ */
+export const REPLICATE_IMAGE_MODELS: Record<string, { id: string; maxSteps: number; steps: Record<string, number> }> = {
+  "flux-dev": { id: "black-forest-labs/flux-dev", maxSteps: 50, steps: { standard: 20, high: 28, ultra: 40 } },
+  "flux-schnell": { id: "black-forest-labs/flux-schnell", maxSteps: 4, steps: { standard: 4, high: 4, ultra: 4 } },
+};
+export const DEFAULT_REPLICATE_IMAGE_MODEL = "flux-dev";
+
+function replicateEnv() {
+  const lovableKey = process.env["LOVABLE_API_KEY"] ?? "";
+  const connKey = process.env["REPLICATE_API_KEY"] ?? "";
+  return { lovableKey, connKey, configured: Boolean(lovableKey && connKey) };
+}
+
+/** Priority: custom endpoint env vars > Replicate connector (images only) > demo. */
 export function providerConfig(kind: JobKind) {
   const prefix = kind === "image" ? "IMAGE" : "VIDEO";
   const url = process.env[`${prefix}_PROVIDER_URL`] ?? "";
   const key = process.env[`${prefix}_PROVIDER_KEY`] ?? "";
   const name = process.env[`${prefix}_PROVIDER_NAME`] ?? "";
-  return { url, key, name: name || (url ? "custom" : "demo"), configured: Boolean(url) };
+  if (url) return { url, key, name: name || "custom", configured: true, replicate: false };
+  if (kind === "image" && replicateEnv().configured) {
+    return { url: "", key: "", name: "replicate", configured: true, replicate: true };
+  }
+  return { url: "", key: "", name: "demo", configured: false, replicate: false };
+}
+
+const REPLICATE_GW = "https://connector-gateway.lovable.dev/replicate/v1";
+
+export class ProviderError extends Error {}
+
+async function runReplicateImage(job: ImageJob): Promise<GeneratedOutput[]> {
+  const env = replicateEnv();
+  const modelKey = job.model && REPLICATE_IMAGE_MODELS[job.model] ? job.model : DEFAULT_REPLICATE_IMAGE_MODEL;
+  const model = REPLICATE_IMAGE_MODELS[modelKey]!;
+  const headers = {
+    Authorization: `Bearer ${env.lovableKey}`,
+    "X-Connection-Api-Key": env.connKey,
+    "Content-Type": "application/json",
+  };
+  const input = {
+    prompt: job.prompt,
+    aspect_ratio: job.aspectRatio,
+    num_outputs: job.count,
+    megapixels: "1",
+    num_inference_steps: Math.min(model.steps[job.quality] ?? 20, model.maxSteps),
+    output_format: "png",
+    go_fast: true,
+  };
+  const res = await fetch(`${REPLICATE_GW}/models/${model.id}/predictions`, {
+    method: "POST",
+    headers: { ...headers, Prefer: "wait=55" },
+    body: JSON.stringify({ input }),
+  });
+  if (res.status === 402) {
+    throw new ProviderError("The connected Replicate account has no credit. Add billing at replicate.com/account/billing.");
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Replicate create failed [${res.status}]: ${body}`);
+    throw new ProviderError(`Replicate request failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  let pred = (await res.json()) as { id: string; status: string; output?: unknown; error?: string | null };
+  const started = Date.now();
+  while (pred.status !== "succeeded" && pred.status !== "failed" && pred.status !== "canceled") {
+    if (Date.now() - started > 120_000) throw new ProviderError("Replicate took too long to respond. Please try again.");
+    await new Promise((r) => setTimeout(r, 2000));
+    const poll = await fetch(`${REPLICATE_GW}/predictions/${pred.id}`, { headers });
+    if (!poll.ok) {
+      const body = await poll.text();
+      throw new ProviderError(`Replicate status check failed (${poll.status}): ${body.slice(0, 200)}`);
+    }
+    pred = await poll.json();
+  }
+  if (pred.status !== "succeeded") {
+    throw new ProviderError(pred.error ? `Replicate: ${String(pred.error).slice(0, 300)}` : "Replicate job did not complete.");
+  }
+  const urls = (Array.isArray(pred.output) ? pred.output : [pred.output]).filter((u): u is string => typeof u === "string");
+  if (urls.length === 0) throw new ProviderError("Replicate returned no images.");
+  return urls.map((url, i) => ({ url, mime: "image/png", label: `Image ${i + 1} · ${model.id}`, demo: false }));
 }
 
 export function dimensionsFor(aspectRatio: string, quality: string) {
