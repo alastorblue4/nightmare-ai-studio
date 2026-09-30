@@ -147,11 +147,13 @@ export const claimOwnerRole = createServerFn({ method: "POST" })
 
 export const ownerSetupState = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
+  .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "owner").limit(1);
+    const { data } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "owner");
+    const owners = (data ?? []).map((r: { user_id: string }) => r.user_id);
     return {
-      ownerExists: Boolean(data && data.length > 0),
+      ownerExists: owners.length > 0,
+      isCurrentUserOwner: owners.includes(context.userId),
       tokenConfigured: Boolean(process.env["OWNER_SETUP_TOKEN"]),
     };
   });
