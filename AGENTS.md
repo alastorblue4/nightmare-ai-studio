@@ -8,3 +8,4 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+- Text→Image uses Replicate via the connector gateway (providers.server.ts REPLICATE_IMAGE_MODELS); outputs copied to private 'generations' bucket with 1-year signed URLs because Replicate URLs expire; failed jobs refund via service-role refund_credit_split.

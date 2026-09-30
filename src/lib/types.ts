@@ -43,16 +43,15 @@ export const ASPECT_RATIOS = [
 ] as const;
 
 export const QUALITIES = [
-  { value: "standard", label: "Standard · 768px" },
-  { value: "high", label: "High · 1152px" },
-  { value: "ultra", label: "Ultra · 1536px" },
+  { value: "standard", label: "Standard · ~1MP, faster" },
+  { value: "high", label: "High · ~1MP, more detail" },
+  { value: "ultra", label: "Ultra · ~1MP, max detail (slowest)" },
 ] as const;
 
+// Keys map to REPLICATE_IMAGE_MODELS in providers.server.ts.
 export const IMAGE_MODELS = [
-  { value: "nightmare-diffusion-xl", label: "Nightmare Diffusion XL (default)" },
-  { value: "nightmare-realism", label: "Nightmare Realism" },
-  { value: "arcade-neon", label: "Arcade Neon" },
-  { value: "local-endpoint", label: "Self-hosted endpoint" },
+  { value: "flux-dev", label: "FLUX.1 [dev] · best quality (default)" },
+  { value: "flux-schnell", label: "FLUX.1 [schnell] · fastest" },
 ] as const;
 
 export const VIDEO_MODELS = [

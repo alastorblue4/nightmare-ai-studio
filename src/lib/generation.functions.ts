@@ -54,7 +54,8 @@ export const createImageGeneration = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => imageSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { moderatePrompt, runImageJob, providerConfig } = await import("./providers.server");
+    const { moderatePrompt, runImageJob, providerConfig, REPLICATE_IMAGE_MODELS, DEFAULT_REPLICATE_IMAGE_MODEL } =
+      await import("./providers.server");
     const check = moderatePrompt(data.prompt);
     if (!check.allowed) return { ok: false as const, reason: "blocked", message: check.reason };
 
@@ -64,12 +65,15 @@ export const createImageGeneration = createServerFn({ method: "POST" })
 
     const { data: spend, error: spendError } = await supabase.rpc("consume_credits", { _cost: cost });
     if (spendError) throw new Error(spendError.message);
-    const spendResult = spend as { ok: boolean; reason?: string; available?: number };
+    const spendResult = spend as { ok: boolean; reason?: string; available?: number; from_free?: number; from_purchased?: number };
+    const usageDate = new Date().toISOString().slice(0, 10);
     if (!spendResult.ok) {
       return { ok: false as const, reason: "insufficient_credits", needed: cost, available: spendResult.available ?? 0 };
     }
 
     const cfg = providerConfig("image");
+    const resolvedModel =
+      REPLICATE_IMAGE_MODELS[data.model ?? ""]?.id ?? REPLICATE_IMAGE_MODELS[DEFAULT_REPLICATE_IMAGE_MODEL]!.id;
     const { data: row, error: insertError } = await supabase
       .from("generations")
       .insert({
@@ -78,7 +82,7 @@ export const createImageGeneration = createServerFn({ method: "POST" })
         status: "running",
         prompt: data.prompt,
         negative_prompt: data.negativePrompt ?? null,
-        model: data.model ?? null,
+        model: cfg.replicate ? resolvedModel : (data.model ?? null),
         provider: cfg.name,
         aspect_ratio: data.aspectRatio,
         quality: data.quality,
@@ -88,10 +92,13 @@ export const createImageGeneration = createServerFn({ method: "POST" })
       })
       .select("*")
       .single();
-    if (insertError) throw new Error(insertError.message);
+    if (insertError) {
+      await refundSpend(context.userId, spendResult, usageDate);
+      throw new Error(insertError.message);
+    }
 
     try {
-      const result = await runImageJob({
+      const raw = await runImageJob({
         prompt: data.prompt,
         negativePrompt: data.negativePrompt ?? null,
         model: data.model ?? null,
@@ -99,6 +106,7 @@ export const createImageGeneration = createServerFn({ method: "POST" })
         quality: data.quality,
         count: data.count,
       });
+      const result = raw.demo ? raw : { ...raw, outputs: await persistOutputs(context.userId, row.id, raw.outputs) };
       const { data: done, error: updateError } = await supabase
         .from("generations")
         .update({
@@ -116,7 +124,8 @@ export const createImageGeneration = createServerFn({ method: "POST" })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Generation failed";
       await supabase.from("generations").update({ status: "failed", error: message }).eq("id", row.id);
-      return { ok: false as const, reason: "provider_error", message };
+      await refundSpend(context.userId, spendResult, usageDate);
+      return { ok: false as const, reason: "provider_error", message: `${message} Your credits were refunded.` };
     }
   });
 
@@ -134,7 +143,8 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
 
     const { data: spend, error: spendError } = await supabase.rpc("consume_credits", { _cost: cost });
     if (spendError) throw new Error(spendError.message);
-    const spendResult = spend as { ok: boolean; available?: number };
+    const spendResult = spend as { ok: boolean; available?: number; from_free?: number; from_purchased?: number };
+    const usageDate = new Date().toISOString().slice(0, 10);
     if (!spendResult.ok) {
       return { ok: false as const, reason: "insufficient_credits", needed: cost, available: spendResult.available ?? 0 };
     }
@@ -187,7 +197,8 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Generation failed";
       await supabase.from("generations").update({ status: "failed", error: message }).eq("id", row.id);
-      return { ok: false as const, reason: "provider_error", message };
+      await refundSpend(context.userId, spendResult, usageDate);
+      return { ok: false as const, reason: "provider_error", message: `${message} Your credits were refunded.` };
     }
   });
 
@@ -223,6 +234,55 @@ export const submitReport = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true as const };
   });
+
+async function refundSpend(
+  userId: string,
+  spend: { from_free?: number; from_purchased?: number },
+  usageDate: string,
+) {
+  if (!spend.from_free && !spend.from_purchased) return;
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.rpc("refund_credit_split" as never, {
+      _user_id: userId,
+      _from_free: spend.from_free ?? 0,
+      _from_purchased: spend.from_purchased ?? 0,
+      _usage_date: usageDate,
+    } as never);
+    if (error) console.error("Credit refund failed", error.message);
+  } catch (e) {
+    console.error("Credit refund failed", e);
+  }
+}
+
+/** Provider URLs expire (~1h on Replicate); copy outputs into private storage with long-lived signed links. */
+async function persistOutputs(
+  userId: string,
+  generationId: string,
+  outputs: { url: string; mime: string; label: string; demo: boolean }[],
+) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return Promise.all(
+    outputs.map(async (o, i) => {
+      try {
+        const res = await fetch(o.url);
+        if (!res.ok) throw new Error(`download ${res.status}`);
+        const mime = res.headers.get("content-type") ?? o.mime;
+        const ext = mime.includes("webp") ? "webp" : mime.includes("jpeg") ? "jpg" : "png";
+        const path = `${userId}/${generationId}/${i + 1}.${ext}`;
+        const buf = new Uint8Array(await res.arrayBuffer());
+        const up = await supabaseAdmin.storage.from("generations").upload(path, buf, { contentType: mime, upsert: true });
+        if (up.error) throw up.error;
+        const signed = await supabaseAdmin.storage.from("generations").createSignedUrl(path, 60 * 60 * 24 * 365);
+        if (signed.error || !signed.data) throw signed.error ?? new Error("sign failed");
+        return { ...o, url: signed.data.signedUrl, mime };
+      } catch (e) {
+        console.error("Persisting output failed; keeping provider URL", e);
+        return o;
+      }
+    }),
+  );
+}
 
 type SupabaseLike = {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;

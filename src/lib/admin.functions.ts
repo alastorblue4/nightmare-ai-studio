@@ -83,7 +83,7 @@ export const setUserRole = createServerFn({ method: "POST" })
 export const saveSetting = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ key: z.string().min(1).max(60), value: z.record(z.unknown()) }).parse(input),
+    z.object({ key: z.string().min(1).max(60), value: z.record(z.string(), z.unknown()) }).parse(input),
   )
   .handler(async ({ data, context }) => {
     const supabase = context.supabase as never as SupabaseLike;

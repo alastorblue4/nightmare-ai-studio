@@ -222,6 +222,15 @@ export type Database = {
       admin_stats: { Args: never; Returns: Json }
       consume_credits: { Args: { _cost: number }; Returns: Json }
       credit_status: { Args: { _user_id?: string }; Returns: Json }
+      refund_credit_split: {
+        Args: {
+          _from_free: number
+          _from_purchased: number
+          _usage_date: string
+          _user_id: string
+        }
+        Returns: undefined
+      }
       refund_credits: {
         Args: { _amount: number; _user_id: string }
         Returns: undefined

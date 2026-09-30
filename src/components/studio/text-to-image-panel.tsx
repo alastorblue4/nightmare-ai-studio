@@ -95,14 +95,19 @@ export function TextToImagePanel({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="negative">Negative prompt (optional)</Label>
+          <Label htmlFor="negative" className="text-muted-foreground">Negative prompt</Label>
           <Textarea
             id="negative"
             rows={2}
             value={negativePrompt}
             onChange={(e) => setNegativePrompt(e.target.value)}
-            placeholder="blurry, watermark, extra limbs"
+            placeholder="Not supported by the current FLUX models"
+            disabled
+            aria-describedby="negative-help"
           />
+          <p id="negative-help" className="text-xs text-muted-foreground">
+            FLUX models don't accept negative prompts. Describe what you want instead (e.g. "sharp, clean background").
+          </p>
         </div>
 
         <div className="space-y-2">
