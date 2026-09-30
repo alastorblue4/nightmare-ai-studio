@@ -10,6 +10,7 @@ const imageSchema = z.object({
   aspectRatio: z.enum(["1:1", "16:9", "9:16"]),
   quality: z.enum(["standard", "high", "ultra"]),
   count: z.number().int().min(1).max(4),
+  mature: z.boolean().optional().default(false),
 });
 
 const videoSchema = z.object({
@@ -19,7 +20,42 @@ const videoSchema = z.object({
   quality: z.enum(["standard", "high", "ultra"]),
   durationSeconds: z.number().int().min(2).max(12),
   sourceImageUrl: z.string().max(5_000_000).optional().nullable(),
+  mature: z.boolean().optional().default(false),
 });
+
+/** Mature mode is only honoured when the server-side profile says the adult opted in. */
+async function matureAllowed(supabase: SupabaseLike, userId: string) {
+  const { data } = await supabase.from("profiles").select("adult_confirmed_at, mature_enabled").eq("id", userId).maybeSingle();
+  return Boolean(data?.adult_confirmed_at && data?.mature_enabled);
+}
+
+export const getMatureSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const supabase = context.supabase as never as SupabaseLike;
+    const { data } = await supabase.from("profiles").select("adult_confirmed_at, mature_enabled").eq("id", context.userId).maybeSingle();
+    return { adultConfirmed: Boolean(data?.adult_confirmed_at), matureEnabled: Boolean(data?.adult_confirmed_at && data?.mature_enabled) };
+  });
+
+export const confirmAdult = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ confirmed: z.literal(true) }).parse(input))
+  .handler(async ({ context }) => {
+    const supabase = context.supabase as never as SupabaseLike;
+    const { error } = await supabase.rpc("confirm_adult", {});
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+export const setMatureMode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ enabled: z.boolean() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const supabase = context.supabase as never as SupabaseLike;
+    const { error } = await supabase.rpc("set_mature_mode", { _enabled: data.enabled });
+    if (error) throw new Error(error.message.includes("age") ? "Confirm you are 18 or older first." : error.message);
+    return { ok: true as const, enabled: data.enabled };
+  });
 
 type CreditSettings = { daily_free_credits: number; image_cost: number; video_cost: number };
 
@@ -56,10 +92,14 @@ export const createImageGeneration = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { moderatePrompt, runImageJob, providerConfig, REPLICATE_IMAGE_MODELS, DEFAULT_REPLICATE_IMAGE_MODEL } =
       await import("./providers.server");
-    const check = moderatePrompt(data.prompt);
+    const supabase = context.supabase as never as SupabaseLike;
+    const mature = data.mature ? await matureAllowed(supabase, context.userId) : false;
+    if (data.mature && !mature) {
+      return { ok: false as const, reason: "blocked" as const, message: "Mature Content is off. Confirm you're 18+ and turn it on in Account." };
+    }
+    const check = moderatePrompt(data.prompt, { mature });
     if (!check.allowed) return { ok: false as const, reason: "blocked" as const, message: check.reason };
 
-    const supabase = context.supabase as never as SupabaseLike;
     const costs = await readCosts(supabase as never);
     const cost = costs.image_cost * data.count;
 
@@ -95,6 +135,7 @@ export const createImageGeneration = createServerFn({ method: "POST" })
         output_count: data.count,
         credits_cost: cost,
         is_demo: !cfg.configured,
+        is_mature: mature,
       })
       .select("*")
       .single();
@@ -141,7 +182,12 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => videoSchema.parse(input))
   .handler(async ({ data, context }) => {
     const p = await import("./providers.server");
-    const check = p.moderatePrompt(data.prompt || "animate this image");
+    const supabaseEarly = context.supabase as never as SupabaseLike;
+    const mature = data.mature ? await matureAllowed(supabaseEarly, context.userId) : false;
+    if (data.mature && !mature) {
+      return { ok: false as const, reason: "blocked" as const, message: "Mature Content is off. Confirm you're 18+ and turn it on in Account." };
+    }
+    const check = p.moderatePrompt(data.prompt || "animate this image", { mature });
     if (!check.allowed) return { ok: false as const, reason: "blocked" as const, message: check.reason };
     const useReplicate = p.replicateVideoConfigured();
     if (useReplicate && !data.sourceImageUrl) {
@@ -184,6 +230,7 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
         output_count: 1,
         credits_cost: cost,
         is_demo: !useReplicate && !p.providerConfig("video").configured,
+        is_mature: mature,
       })
       .select("*")
       .single();
