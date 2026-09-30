@@ -223,6 +223,10 @@ export async function runImageJob(job: ImageJob): Promise<ProviderResult> {
   const cfg = providerConfig("image");
   const { width, height } = dimensionsFor(job.aspectRatio, job.quality);
 
+  if (cfg.replicate) {
+    return { provider: "replicate", demo: false, outputs: await runReplicateImage(job) };
+  }
+
   if (cfg.configured) {
     const data = await callRemote(cfg.url, cfg.key, {
       type: "text-to-image",
