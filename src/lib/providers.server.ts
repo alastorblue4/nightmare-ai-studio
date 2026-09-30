@@ -111,7 +111,7 @@ async function runReplicateImage(job: ImageJob): Promise<{ outputs: GeneratedOut
     body: JSON.stringify({ input }),
   });
   if (res.status === 402) {
-    throw new ProviderError("The connected Replicate account has no credit. Add billing at replicate.com/account/billing.");
+    throw Object.assign(new ProviderError("The connected Replicate account has no credit. Add billing at replicate.com/account/billing."), { billing: true });
   }
   if (!res.ok) {
     const body = await res.text();
@@ -393,7 +393,7 @@ export async function startReplicateVideo(job: {
     }),
   });
   if (res.status === 402) {
-    throw new ProviderError("The connected Replicate account has no credit. Add billing at replicate.com/account/billing.");
+    throw Object.assign(new ProviderError("The connected Replicate account has no credit. Add billing at replicate.com/account/billing."), { billing: true });
   }
   if (!res.ok) {
     const body = await res.text();
