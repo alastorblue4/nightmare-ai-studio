@@ -3,6 +3,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { MatureJobToggle } from "@/components/mature-content";
 import { ResultCard } from "@/components/studio/result-card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ export function TextToImagePanel({
   const [quality, setQuality] = useState<string>("standard");
   const [count, setCount] = useState("1");
   const [busy, setBusy] = useState(false);
+  const [mature, setMature] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<Generation[]>([]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -55,6 +57,7 @@ export function TextToImagePanel({
           aspectRatio: aspectRatio as "1:1" | "16:9" | "9:16",
           quality: quality as "standard" | "high" | "ultra",
           count: Number(count),
+          mature,
         },
       });
       if (!result.ok) {
@@ -84,6 +87,7 @@ export function TextToImagePanel({
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
       <div className="panel space-y-5 p-5">
+        <MatureJobToggle id="img-mature" value={mature} onChange={setMature} />
         <div className="space-y-2">
           <Label htmlFor="prompt">Prompt</Label>
           <Textarea

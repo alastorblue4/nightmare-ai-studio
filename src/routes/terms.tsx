@@ -40,6 +40,18 @@ function Terms() {
           </p>
         </section>
         <section className="space-y-2">
+          <h2 className="text-xl font-semibold">2a. Mature Content (18+)</h2>
+          <p className="text-muted-foreground">
+            Adults who confirm they are 18 or older may turn on Mature Content in their account. It is off by
+            default and covers non-explicit adult themes only (for example romance, pin-up styles or revealing
+            outfits), subject to the AI provider's own rules. Mature generations are private to your account and
+            labelled 18+. The following are always prohibited: explicit sexual or pornographic content; any
+            sexual or suggestive content involving minors or young-looking persons; non-consensual sexual
+            content; illegal content; and attempts to bypass site or provider safety filters. Violations can be
+            reported and may lead to removal and account suspension.
+          </p>
+        </section>
+        <section className="space-y-2">
           <h2 className="text-xl font-semibold">3. Credits and payments</h2>
           <p className="text-muted-foreground">
             Credits are consumed when a generation job is accepted. Paid credit packs only become purchasable

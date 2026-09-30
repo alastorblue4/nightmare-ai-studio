@@ -3,6 +3,7 @@ import { Film, Loader2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { MatureJobToggle } from "@/components/mature-content";
 import { ResultCard } from "@/components/studio/result-card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
   const [quality, setQuality] = useState<string>("standard");
   const [duration, setDuration] = useState(5);
   const [busy, setBusy] = useState(false);
+  const [mature, setMature] = useState(false);
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<Generation[]>([]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -87,6 +89,7 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
           quality: quality as "standard" | "high",
           durationSeconds: duration,
           sourceImageUrl: image,
+          mature,
         },
       });
       if (!result.ok) {
@@ -128,6 +131,7 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
       <div className="panel space-y-5 p-5">
+        <MatureJobToggle id="vid-mature" value={mature} onChange={setMature} />
         <div className="space-y-2">
           <Label htmlFor="video-upload">Reference image</Label>
           <div

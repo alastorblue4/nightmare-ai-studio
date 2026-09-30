@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
+import { MatureSettingsCard } from "@/components/mature-content";
 import { OwnerSetupCard } from "@/components/owner-setup-card";
 import { SiteFooter, SiteNav } from "@/components/site-nav";
 import { CreditsBar } from "@/components/studio/credits-bar";
@@ -45,6 +46,7 @@ function Account() {
         </section>
         <CreditsBar loading={credits.isLoading} status={credits.data?.status as unknown as CreditStatus | undefined} costs={credits.data?.costs} />
         <Button asChild variant="outline"><Link to="/pricing">Get more credits</Link></Button>
+        <MatureSettingsCard />
         <OwnerSetupCard />
       </main>
       <SiteFooter />

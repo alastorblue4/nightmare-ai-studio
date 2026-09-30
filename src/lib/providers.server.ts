@@ -334,15 +334,56 @@ const BLOCKED = [
   "how to make a bomb",
 ];
 
-export function moderatePrompt(prompt: string): { allowed: boolean; reason?: string } {
+/** Explicit sexual content is never allowed, in any mode. */
+const EXPLICIT = [
+  "porn", "pornographic", "hentai", "nsfw", "xxx", "explicit sex", "sex act", "sexual intercourse",
+  "intercourse", "genitals", "genitalia", "penis", "vagina", "fully nude", "full nudity", "naked",
+  "nude", "topless", "nipples", "masturbation", "masturbating", "blowjob", "orgasm", "erotic", "fetish",
+];
+/** Anything implying a minor or a young-looking person. */
+const YOUTH = [
+  "child", "children", "childlike", "childish body", "kid", "kids", "minor", "underage", "teen", "teenage", "loli", "shota",
+  "schoolgirl", "schoolboy", "young girl", "young boy", "little girl", "little boy", "preteen",
+  "baby", "toddler", "petite young", "barely legal", "youthful body", "high school",
+];
+/** Suggestive themes: only allowed in Mature mode, never with youth terms. */
+const SUGGESTIVE = [
+  "sexy", "seductive", "sensual", "lingerie", "bikini", "pin-up", "pinup", "boudoir", "revealing",
+  "suggestive", "cleavage", "lust", "romantic kiss", "flirt",
+];
+/** Attempts to get around provider/site safety. */
+const BYPASS = [
+  "bypass filter", "bypass the filter", "disable safety", "safety checker", "jailbreak", "uncensored",
+  "ignore previous instructions", "no restrictions", "without censorship",
+];
+/** Non-consensual sexual themes. */
+const NONCONSENT = ["rape", "non-consensual", "nonconsensual", "forced sex", "sexual assault", "drugged", "unconscious woman", "revenge porn", "deepfake nude"];
+
+function hasTerm(value: string, terms: string[]) {
+  return terms.some((t) => {
+    const escaped = t.trim().replace(/[.*+?^$()|[\]\\{}]/g, "\\$&");
+    return new RegExp(`(^|[^a-z])${escaped}s?([^a-z]|$)`).test(value);
+  });
+}
+
+export function moderatePrompt(prompt: string, opts: { mature?: boolean } = {}): { allowed: boolean; reason?: string } {
   const value = prompt.toLowerCase();
-  const hit = BLOCKED.find((term) => value.includes(term));
-  if (hit) {
-    return { allowed: false, reason: "This prompt violates the Nightmare AI content policy." };
+  const policy = "This prompt violates the Nightmare AI content policy.";
+  if (BLOCKED.some((term) => value.includes(term))) return { allowed: false, reason: policy };
+  if (hasTerm(value, BYPASS)) return { allowed: false, reason: "Attempts to bypass safety filters are not allowed." };
+  if (hasTerm(value, NONCONSENT)) return { allowed: false, reason: "Non-consensual sexual content is prohibited." };
+  if (hasTerm(value, EXPLICIT)) {
+    return { allowed: false, reason: "Explicit sexual content isn't supported on Nightmare AI, including in Mature mode." };
   }
-  if (prompt.trim().length < 3) {
-    return { allowed: false, reason: "Please write a longer prompt." };
+  const suggestive = hasTerm(value, SUGGESTIVE);
+  const youth = hasTerm(value, YOUTH);
+  if ((suggestive || opts.mature) && youth) {
+    return { allowed: false, reason: "Mature or suggestive content involving minors or young-looking people is prohibited." };
   }
+  if (suggestive && !opts.mature) {
+    return { allowed: false, reason: "This prompt looks suggestive. Turn on Mature Content in your account (18+) to use mature themes." };
+  }
+  if (prompt.trim().length < 3) return { allowed: false, reason: "Please write a longer prompt." };
   return { allowed: true };
 }
 

@@ -1,5 +1,6 @@
 import { Download, RefreshCw, Trash2 } from "lucide-react";
 
+import { MatureBadge } from "@/components/mature-content";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { aspectClass, type Generation } from "@/lib/types";
@@ -46,6 +47,7 @@ export function ResultCard({
         ) : (
           <Badge variant="outline">{generation.provider}</Badge>
         )}
+        {generation.is_mature ? <MatureBadge /> : null}
         <Badge variant="secondary">{generation.aspect_ratio}</Badge>
         <span className="ml-auto text-xs text-muted-foreground">
           {new Date(generation.created_at).toLocaleString()}

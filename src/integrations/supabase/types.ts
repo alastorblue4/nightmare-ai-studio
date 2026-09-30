@@ -107,6 +107,7 @@ export type Database = {
           error: string | null
           id: string
           is_demo: boolean
+          is_mature: boolean
           kind: string
           model: string | null
           negative_prompt: string | null
@@ -129,6 +130,7 @@ export type Database = {
           error?: string | null
           id?: string
           is_demo?: boolean
+          is_mature?: boolean
           kind: string
           model?: string | null
           negative_prompt?: string | null
@@ -151,6 +153,7 @@ export type Database = {
           error?: string | null
           id?: string
           is_demo?: boolean
+          is_mature?: boolean
           kind?: string
           model?: string | null
           negative_prompt?: string | null
@@ -168,24 +171,30 @@ export type Database = {
       }
       profiles: {
         Row: {
+          adult_confirmed_at: string | null
           created_at: string
           display_name: string | null
           email: string | null
           id: string
+          mature_enabled: boolean
           purchased_credits: number
         }
         Insert: {
+          adult_confirmed_at?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
           id: string
+          mature_enabled?: boolean
           purchased_credits?: number
         }
         Update: {
+          adult_confirmed_at?: string | null
           created_at?: string
           display_name?: string | null
           email?: string | null
           id?: string
+          mature_enabled?: boolean
           purchased_credits?: number
         }
         Relationships: []
@@ -268,6 +277,7 @@ export type Database = {
       }
       admin_stats: { Args: never; Returns: Json }
       check_generation_allowed: { Args: { _kind: string }; Returns: Json }
+      confirm_adult: { Args: never; Returns: undefined }
       consume_credits: { Args: { _cost: number }; Returns: Json }
       credit_status: { Args: { _user_id?: string }; Returns: Json }
       refund_credit_split: {
@@ -283,6 +293,7 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: undefined
       }
+      set_mature_mode: { Args: { _enabled: boolean }; Returns: boolean }
     }
     Enums: {
       app_role: "owner" | "admin" | "user"
