@@ -15,7 +15,7 @@ const imageSchema = z.object({
 const videoSchema = z.object({
   prompt: z.string().max(2000),
   model: z.string().max(120).optional().nullable(),
-  aspectRatio: z.enum(["1:1", "16:9", "9:16"]),
+  aspectRatio: z.enum(["1:1", "16:9", "9:16", "auto"]),
   quality: z.enum(["standard", "high", "ultra"]),
   durationSeconds: z.number().int().min(2).max(12),
   sourceImageUrl: z.string().max(5_000_000).optional().nullable(),

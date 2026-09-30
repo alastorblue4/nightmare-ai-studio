@@ -83,7 +83,7 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
         data: {
           prompt: prompt.trim(),
           model,
-          aspectRatio: "16:9",
+          aspectRatio: "auto",
           quality: quality as "standard" | "high",
           durationSeconds: duration,
           sourceImageUrl: image,
