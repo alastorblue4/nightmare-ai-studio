@@ -12,7 +12,11 @@ import { useSession } from "@/hooks/use-session";
 import { lovable } from "@/integrations/lovable/index";
 import { supabase } from "@/integrations/supabase/client";
 
-const searchSchema = z.object({ mode: z.enum(["login", "signup"]).optional() });
+const searchSchema = z.object({ mode: z.enum(["login", "signup"]).optional(), next: z.string().optional() });
+
+function safeNext(next: string | undefined) {
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : undefined;
+}
 
 export const Route = createFileRoute("/auth")({
   validateSearch: searchSchema,
@@ -28,7 +32,8 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
-  const { mode } = Route.useSearch();
+  const { mode, next: rawNext } = Route.useSearch();
+  const next = safeNext(rawNext);
   const navigate = useNavigate();
   const { user, loading } = useSession();
   const [isSignUp, setIsSignUp] = useState(mode === "signup");
@@ -38,9 +43,15 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [sentConfirmation, setSentConfirmation] = useState(false);
 
+  const returnUrl = next
+    ? `${window.location.origin}/auth?next=${encodeURIComponent(next)}`
+    : window.location.origin;
+
   useEffect(() => {
-    if (!loading && user) navigate({ to: "/dashboard", replace: true });
-  }, [loading, user, navigate]);
+    if (loading || !user) return;
+    if (next) window.location.href = next;
+    else navigate({ to: "/dashboard", replace: true });
+  }, [loading, user, navigate, next]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -51,7 +62,7 @@ function AuthPage() {
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: returnUrl,
             data: { display_name: displayName || email.split("@")[0] },
           },
         });
@@ -76,14 +87,15 @@ function AuthPage() {
 
   async function handleGoogle() {
     setBusy(true);
-    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: returnUrl });
     if (result.error) {
       setBusy(false);
       toast.error("Google sign-in failed. Please try again.");
       return;
     }
     if (result.redirected) return;
-    navigate({ to: "/dashboard" });
+    if (next) window.location.href = next;
+    else navigate({ to: "/dashboard" });
   }
 
   return (
