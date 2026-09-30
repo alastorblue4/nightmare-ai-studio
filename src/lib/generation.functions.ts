@@ -113,6 +113,7 @@ export const createImageGeneration = createServerFn({ method: "POST" })
           status: "succeeded",
           outputs: result.outputs,
           provider: result.provider,
+          provider_job_id: result.jobId ?? null,
           is_demo: result.demo,
           completed_at: new Date().toISOString(),
         })

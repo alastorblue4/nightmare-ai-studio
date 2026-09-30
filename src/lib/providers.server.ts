@@ -49,6 +49,7 @@ export type ProviderResult = {
   provider: string;
   demo: boolean;
   outputs: GeneratedOutput[];
+  jobId?: string;
 };
 
 /**
@@ -86,7 +87,7 @@ const REPLICATE_GW = "https://connector-gateway.lovable.dev/replicate/v1";
 
 export class ProviderError extends Error {}
 
-async function runReplicateImage(job: ImageJob): Promise<GeneratedOutput[]> {
+async function runReplicateImage(job: ImageJob): Promise<{ outputs: GeneratedOutput[]; jobId: string }> {
   const env = replicateEnv();
   const modelKey = job.model && REPLICATE_IMAGE_MODELS[job.model] ? job.model : DEFAULT_REPLICATE_IMAGE_MODEL;
   const model = REPLICATE_IMAGE_MODELS[modelKey]!;
@@ -134,7 +135,10 @@ async function runReplicateImage(job: ImageJob): Promise<GeneratedOutput[]> {
   }
   const urls = (Array.isArray(pred.output) ? pred.output : [pred.output]).filter((u): u is string => typeof u === "string");
   if (urls.length === 0) throw new ProviderError("Replicate returned no images.");
-  return urls.map((url, i) => ({ url, mime: "image/png", label: `Image ${i + 1} · ${model.id}`, demo: false }));
+  return {
+    jobId: pred.id,
+    outputs: urls.map((url, i) => ({ url, mime: "image/png", label: `Image ${i + 1} · ${model.id}`, demo: false })),
+  };
 }
 
 export function dimensionsFor(aspectRatio: string, quality: string) {
@@ -224,7 +228,8 @@ export async function runImageJob(job: ImageJob): Promise<ProviderResult> {
   const { width, height } = dimensionsFor(job.aspectRatio, job.quality);
 
   if (cfg.replicate) {
-    return { provider: "replicate", demo: false, outputs: await runReplicateImage(job) };
+    const r = await runReplicateImage(job);
+    return { provider: "replicate", demo: false, outputs: r.outputs, jobId: r.jobId };
   }
 
   if (cfg.configured) {

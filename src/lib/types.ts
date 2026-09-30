@@ -23,6 +23,7 @@ export type Generation = {
   outputs: GenerationOutput[];
   source_image_url: string | null;
   error: string | null;
+  provider_job_id?: string | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -54,10 +55,12 @@ export const IMAGE_MODELS = [
   { value: "flux-schnell", label: "FLUX.1 [schnell] · fastest" },
 ] as const;
 
-export const VIDEO_MODELS = [
-  { value: "nightmare-motion-v1", label: "Nightmare Motion v1 (default)" },
-  { value: "nightmare-motion-cinematic", label: "Nightmare Motion Cinematic" },
-  { value: "local-endpoint", label: "Self-hosted endpoint" },
+// Keys map to REPLICATE_VIDEO_MODELS in providers.server.ts.
+export const VIDEO_MODELS = [{ value: "wan-2.2-i2v-fast", label: "Wan 2.2 Image→Video (fast)" }] as const;
+
+export const VIDEO_QUALITIES = [
+  { value: "standard", label: "Standard · 480p" },
+  { value: "high", label: "High · 720p" },
 ] as const;
 
 export function aspectClass(ratio: string) {
