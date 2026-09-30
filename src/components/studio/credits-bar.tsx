@@ -11,9 +11,9 @@ export function CreditsBar({
   costs,
   loading,
 }: {
-  status?: CreditStatus;
-  costs?: { image_cost: number; video_cost: number };
-  loading?: boolean;
+  status?: CreditStatus | undefined;
+  costs?: { image_cost: number; video_cost: number } | undefined;
+  loading?: boolean | undefined;
 }) {
   if (loading || !status) {
     return <Skeleton className="h-20 w-full rounded-2xl" />;

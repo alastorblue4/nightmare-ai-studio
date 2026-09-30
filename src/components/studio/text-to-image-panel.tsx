@@ -18,7 +18,7 @@ export function TextToImagePanel({
   initialPrompt,
 }: {
   onComplete: () => void;
-  initialPrompt?: string | null;
+  initialPrompt?: string | null | undefined;
 }) {
   const generate = useServerFn(createImageGeneration);
   const [prompt, setPrompt] = useState("");
