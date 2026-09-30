@@ -43,9 +43,9 @@ export const ASPECT_RATIOS = [
 ] as const;
 
 export const QUALITIES = [
-  { value: "standard", label: "Standard · 768px" },
-  { value: "high", label: "High · 1152px" },
-  { value: "ultra", label: "Ultra · 1536px" },
+  { value: "standard", label: "Standard · ~1MP, faster" },
+  { value: "high", label: "High · ~1MP, more detail" },
+  { value: "ultra", label: "Ultra · ~1MP, max detail (slowest)" },
 ] as const;
 
 // Keys map to REPLICATE_IMAGE_MODELS in providers.server.ts.

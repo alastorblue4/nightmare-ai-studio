@@ -92,6 +92,9 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
       <div className="panel space-y-5 p-5">
+        <p role="note" className="rounded-lg border border-neon/40 bg-neon/10 px-3 py-2 text-xs text-foreground">
+          Demo only — Image → Video is not connected to a real AI provider yet. Results are labelled placeholders.
+        </p>
         <div className="space-y-2">
           <Label htmlFor="video-upload">Reference image</Label>
           <div
