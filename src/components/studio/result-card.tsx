@@ -41,7 +41,7 @@ export function ResultCard({
         </Badge>
         {generation.is_demo ? (
           <Badge variant="outline" className="border-destructive/50 text-destructive">
-            Demo placeholder — not AI generated
+            DEMO — not a real AI result
           </Badge>
         ) : (
           <Badge variant="outline">{generation.provider}</Badge>
@@ -52,6 +52,11 @@ export function ResultCard({
         </span>
       </div>
 
+      {generation.is_demo ? (
+        <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-destructive" role="note">
+          DEMO output — no AI provider was used. This is a placeholder, not a generated result.
+        </div>
+      ) : null}
       {generation.status === "failed" ? (
         <div className="p-4 text-sm text-destructive">Generation failed: {generation.error ?? "unknown error"}</div>
       ) : generation.status === "running" || generation.status === "queued" ? (
@@ -92,7 +97,7 @@ export function ResultCard({
               }
             >
               <Download className="mr-1.5 h-3.5 w-3.5" />
-              {outputs.length > 1 ? `Save ${index + 1}` : "Save"}
+              {generation.is_demo ? "Save DEMO" : outputs.length > 1 ? `Save ${index + 1}` : "Save"}
             </Button>
           ))}
           {onReuse ? (

@@ -267,6 +267,7 @@ export type Database = {
         Returns: undefined
       }
       admin_stats: { Args: never; Returns: Json }
+      check_generation_allowed: { Args: { _kind: string }; Returns: Json }
       consume_credits: { Args: { _cost: number }; Returns: Json }
       credit_status: { Args: { _user_id?: string }; Returns: Json }
       refund_credit_split: {

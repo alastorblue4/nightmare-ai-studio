@@ -57,11 +57,16 @@ export const createImageGeneration = createServerFn({ method: "POST" })
     const { moderatePrompt, runImageJob, providerConfig, REPLICATE_IMAGE_MODELS, DEFAULT_REPLICATE_IMAGE_MODEL } =
       await import("./providers.server");
     const check = moderatePrompt(data.prompt);
-    if (!check.allowed) return { ok: false as const, reason: "blocked", message: check.reason };
+    if (!check.allowed) return { ok: false as const, reason: "blocked" as const, message: check.reason };
 
     const supabase = context.supabase as never as SupabaseLike;
     const costs = await readCosts(supabase as never);
     const cost = costs.image_cost * data.count;
+
+    const { data: gate, error: gateError } = await supabase.rpc("check_generation_allowed", { _kind: "image" });
+    if (gateError) throw new Error(gateError.message);
+    const gateResult = gate as { ok: boolean; reason?: string; limit?: number };
+    if (!gateResult.ok) return blockedByGate(gateResult);
 
     const { data: spend, error: spendError } = await supabase.rpc("consume_credits", { _cost: cost });
     if (spendError) throw new Error(spendError.message);
@@ -74,7 +79,8 @@ export const createImageGeneration = createServerFn({ method: "POST" })
     const cfg = providerConfig("image");
     const resolvedModel =
       REPLICATE_IMAGE_MODELS[data.model ?? ""]?.id ?? REPLICATE_IMAGE_MODELS[DEFAULT_REPLICATE_IMAGE_MODEL]!.id;
-    const { data: row, error: insertError } = await supabase
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+    const { data: row, error: insertError } = await db
       .from("generations")
       .insert({
         user_id: context.userId,
@@ -107,7 +113,7 @@ export const createImageGeneration = createServerFn({ method: "POST" })
         count: data.count,
       });
       const result = raw.demo ? raw : { ...raw, outputs: await persistOutputs(context.userId, row.id, raw.outputs) };
-      const { data: done, error: updateError } = await supabase
+      const { data: done, error: updateError } = await db
         .from("generations")
         .update({
           status: "succeeded",
@@ -124,9 +130,9 @@ export const createImageGeneration = createServerFn({ method: "POST" })
       return { ok: true as const, generation: done };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Generation failed";
-      await supabase.from("generations").update({ status: "failed", error: message }).eq("id", row.id);
+      await db.from("generations").update({ status: "failed", error: message }).eq("id", row.id);
       await refundSpend(context.userId, spendResult, usageDate);
-      return { ok: false as const, reason: "provider_error", message: `${message} Your credits were refunded.` };
+      return providerFailure(error, message);
     }
   });
 
@@ -136,18 +142,23 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const p = await import("./providers.server");
     const check = p.moderatePrompt(data.prompt || "animate this image");
-    if (!check.allowed) return { ok: false as const, reason: "blocked", message: check.reason };
+    if (!check.allowed) return { ok: false as const, reason: "blocked" as const, message: check.reason };
     const useReplicate = p.replicateVideoConfigured();
     if (useReplicate && !data.sourceImageUrl) {
-      return { ok: false as const, reason: "invalid", message: "Upload a reference image first." };
+      return { ok: false as const, reason: "invalid" as const, message: "Upload a reference image first." };
     }
     if (data.sourceImageUrl && !/^data:image\/(png|jpe?g|webp);base64,/.test(data.sourceImageUrl)) {
-      return { ok: false as const, reason: "invalid", message: "Reference image must be PNG, JPG or WebP." };
+      return { ok: false as const, reason: "invalid" as const, message: "Reference image must be PNG, JPG or WebP." };
     }
 
     const supabase = context.supabase as never as SupabaseLike;
     const costs = await readCosts(supabase as never);
     const cost = costs.video_cost;
+
+    const { data: gate, error: gateError } = await supabase.rpc("check_generation_allowed", { _kind: "video" });
+    if (gateError) throw new Error(gateError.message);
+    const gateResult = gate as { ok: boolean; reason?: string; limit?: number };
+    if (!gateResult.ok) return blockedByGate(gateResult);
     const { data: spend, error: spendError } = await supabase.rpc("consume_credits", { _cost: cost });
     if (spendError) throw new Error(spendError.message);
     const spendResult = spend as { ok: boolean; available?: number; from_free?: number; from_purchased?: number };
@@ -157,7 +168,8 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
     const usageDate = new Date().toISOString().slice(0, 10);
     const modelKey = p.REPLICATE_VIDEO_MODELS[data.model ?? ""] ? data.model! : p.DEFAULT_REPLICATE_VIDEO_MODEL;
 
-    const { data: row, error: insertError } = await supabase
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+    const { data: row, error: insertError } = await db
       .from("generations")
       .insert({
         user_id: context.userId,
@@ -205,7 +217,7 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
           .from("generation_charges" as never)
           .update({ provider_job_id: started.jobId } as never)
           .eq("generation_id", row.id);
-        const { data: queued } = await supabase
+        const { data: queued } = await db
           .from("generations")
           .update({
             status: "running",
@@ -227,7 +239,7 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
         durationSeconds: data.durationSeconds,
         sourceImageUrl: sourceUrl,
       });
-      const { data: done, error: updateError } = await supabase
+      const { data: done, error: updateError } = await db
         .from("generations")
         .update({
           status: "succeeded",
@@ -245,9 +257,9 @@ export const createVideoGeneration = createServerFn({ method: "POST" })
       return { ok: true as const, pending: false as const, generation: done };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Generation failed";
-      await supabase.from("generations").update({ status: "failed", error: message }).eq("id", row.id);
+      await db.from("generations").update({ status: "failed", error: message }).eq("id", row.id);
       await refundCharge(row.id);
-      return { ok: false as const, reason: "provider_error", message: `${message} Your credits were refunded.` };
+      return providerFailure(error, message);
     }
   });
 
@@ -299,7 +311,7 @@ export const checkVideoGeneration = createServerFn({ method: "POST" })
       const message = pred.error ? `Replicate: ${pred.error}` : "The video job did not complete.";
       const { data: failed } = await supabaseAdmin
         .from("generations")
-        .update({ status: "failed", error: `${message} Credits refunded.` } as never)
+        .update({ status: "failed", error: `${message} Site credits refunded.` } as never)
         .eq("id", data.id)
         .select("*")
         .single();
@@ -434,3 +446,27 @@ type SupabaseLike = {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
   from: (table: string) => any;
 };
+
+function blockedByGate(g: { reason?: string; limit?: number }) {
+  if (g.reason === "job_running") {
+    return { ok: false as const, reason: "job_running" as const, message: "You already have a job running. Wait for it to finish before starting another." };
+  }
+  return {
+    ok: false as const,
+    reason: "daily_limit" as const,
+    message: `Daily limit reached (${g.limit ?? 0} per day for this mode). It resets at midnight UTC.`,
+  };
+}
+
+function providerFailure(error: unknown, message: string) {
+  const billing = error instanceof Error && (error as { billing?: boolean }).billing === true;
+  if (billing) {
+    return {
+      ok: false as const,
+      reason: "provider_billing" as const,
+      message:
+        "The AI provider (Replicate) account is out of credit, so the job couldn't run. Your site credits were refunded. Site owner: add billing/credit at replicate.com/account/billing.",
+    };
+  }
+  return { ok: false as const, reason: "provider_error" as const, message: `${message} Your site credits were refunded.` };
+}
