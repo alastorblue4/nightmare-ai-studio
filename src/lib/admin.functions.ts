@@ -43,9 +43,9 @@ export const getAdminOverview = createServerFn({ method: "GET" })
         created_at: string;
       }[],
       userRoles: (roleRows ?? []) as { user_id: string; role: string }[],
-      jobs: (jobsRes.data ?? []) as Record<string, unknown>[],
-      settings: (settingsRes.data ?? []) as { key: string; value: Record<string, unknown>; is_public: boolean }[],
-      reports: (reportsRes.data ?? []) as Record<string, unknown>[],
+      jobs: (jobsRes.data ?? []) as { id: string; user_id: string; kind: string; status: string; prompt: string; credits_cost: number; is_demo: boolean; provider: string; created_at: string }[],
+      settings: (settingsRes.data ?? []) as { key: string; value: any; is_public: boolean }[],
+      reports: (reportsRes.data ?? []) as { id: string; reason: string; details: string | null; status: string; created_at: string; generation_id: string | null }[],
     };
   });
 
