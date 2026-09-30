@@ -338,11 +338,11 @@ const BLOCKED = [
 const EXPLICIT = [
   "porn", "pornographic", "hentai", "nsfw", "xxx", "explicit sex", "sex act", "sexual intercourse",
   "intercourse", "genitals", "genitalia", "penis", "vagina", "fully nude", "full nudity", "naked",
-  "nude", "topless", "nipples", "masturbat", "blowjob", "orgasm", "cum ", "erotic", "fetish",
+  "nude", "topless", "nipples", "masturbation", "masturbating", "blowjob", "orgasm", "erotic", "fetish",
 ];
 /** Anything implying a minor or a young-looking person. */
 const YOUTH = [
-  "child", "children", "kid", "kids", "minor", "underage", "teen", "teenage", "loli", "shota",
+  "child", "children", "childlike", "childish body", "kid", "kids", "minor", "underage", "teen", "teenage", "loli", "shota",
   "schoolgirl", "schoolboy", "young girl", "young boy", "little girl", "little boy", "preteen",
   "baby", "toddler", "petite young", "barely legal", "youthful body", "high school",
 ];
@@ -360,7 +360,10 @@ const BYPASS = [
 const NONCONSENT = ["rape", "non-consensual", "nonconsensual", "forced sex", "sexual assault", "drugged", "unconscious woman", "revenge porn", "deepfake nude"];
 
 function hasTerm(value: string, terms: string[]) {
-  return terms.some((t) => new RegExp(`(^|[^a-z])${t.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(value));
+  return terms.some((t) => {
+    const escaped = t.trim().replace(/[.*+?^$()|[\]\\{}]/g, "\\$&");
+    return new RegExp(`(^|[^a-z])${escaped}s?([^a-z]|$)`).test(value);
+  });
 }
 
 export function moderatePrompt(prompt: string, opts: { mature?: boolean } = {}): { allowed: boolean; reason?: string } {
