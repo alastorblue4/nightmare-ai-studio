@@ -60,6 +60,8 @@ export function TextToImagePanel({
       if (!result.ok) {
         if (result.reason === "insufficient_credits") {
           toast.error(`Not enough credits — this job needs ${result.needed}, you have ${result.available}.`);
+        } else if (result.reason === "provider_billing") {
+          toast.error("AI provider out of credit", { description: result.message, duration: 15000 });
         } else {
           toast.error(result.message ?? "Generation failed");
         }
