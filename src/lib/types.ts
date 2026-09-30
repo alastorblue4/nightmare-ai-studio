@@ -48,11 +48,10 @@ export const QUALITIES = [
   { value: "ultra", label: "Ultra · 1536px" },
 ] as const;
 
+// Keys map to REPLICATE_IMAGE_MODELS in providers.server.ts.
 export const IMAGE_MODELS = [
-  { value: "nightmare-diffusion-xl", label: "Nightmare Diffusion XL (default)" },
-  { value: "nightmare-realism", label: "Nightmare Realism" },
-  { value: "arcade-neon", label: "Arcade Neon" },
-  { value: "local-endpoint", label: "Self-hosted endpoint" },
+  { value: "flux-dev", label: "FLUX.1 [dev] · best quality (default)" },
+  { value: "flux-schnell", label: "FLUX.1 [schnell] · fastest" },
 ] as const;
 
 export const VIDEO_MODELS = [
