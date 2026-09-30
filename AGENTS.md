@@ -12,3 +12,5 @@
 
 - Generation rows are written only by the server (service role); users have read/delete only — prevents forged results/is_demo flags.
 - check_generation_allowed RPC enforces daily per-kind limits (app_settings.credits.daily_image_limit/daily_video_limit) and one running job per user; staff bypass.
+- Mature mode: profiles.adult_confirmed_at/mature_enabled changed only via confirm_adult/set_mature_mode RPCs; server re-checks before honouring `mature`, sets generations.is_mature; moderatePrompt always blocks explicit/minor/non-consent/bypass terms — never pass provider safety-disable flags.
+- Users may only UPDATE profiles.display_name (column grant) — prevents self-editing credits or age flags.
