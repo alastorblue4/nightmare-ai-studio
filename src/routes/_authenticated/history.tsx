@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useEffect, useState } from "react";
 
 import { SiteFooter, SiteNav } from "@/components/site-nav";
 import { ResultCard } from "@/components/studio/result-card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { checkVideoGeneration } from "@/lib/generation.functions";
 import type { Generation } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/history")({
@@ -38,6 +40,18 @@ function History() {
       return (data ?? []) as unknown as Generation[];
     },
   });
+
+  const check = useServerFn(checkVideoGeneration);
+  const pending = (q.data ?? []).filter((g) => g.kind === "video" && (g.status === "running" || g.status === "queued"));
+  const pendingKey = pending.map((g) => g.id).join(",");
+  useEffect(() => {
+    if (!pendingKey) return;
+    const t = setTimeout(async () => {
+      await Promise.allSettled(pendingKey.split(",").map((id) => check({ data: { id } })));
+      q.refetch();
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [pendingKey, q.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-background">
