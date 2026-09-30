@@ -20,6 +20,7 @@ export type Generation = {
   output_count: number;
   credits_cost: number;
   is_demo: boolean;
+  is_mature?: boolean;
   outputs: GenerationOutput[];
   source_image_url: string | null;
   error: string | null;
