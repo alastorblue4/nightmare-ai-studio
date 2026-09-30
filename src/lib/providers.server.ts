@@ -49,6 +49,7 @@ export type ProviderResult = {
   provider: string;
   demo: boolean;
   outputs: GeneratedOutput[];
+  jobId?: string;
 };
 
 /**
@@ -86,7 +87,7 @@ const REPLICATE_GW = "https://connector-gateway.lovable.dev/replicate/v1";
 
 export class ProviderError extends Error {}
 
-async function runReplicateImage(job: ImageJob): Promise<GeneratedOutput[]> {
+async function runReplicateImage(job: ImageJob): Promise<{ outputs: GeneratedOutput[]; jobId: string }> {
   const env = replicateEnv();
   const modelKey = job.model && REPLICATE_IMAGE_MODELS[job.model] ? job.model : DEFAULT_REPLICATE_IMAGE_MODEL;
   const model = REPLICATE_IMAGE_MODELS[modelKey]!;
@@ -134,7 +135,10 @@ async function runReplicateImage(job: ImageJob): Promise<GeneratedOutput[]> {
   }
   const urls = (Array.isArray(pred.output) ? pred.output : [pred.output]).filter((u): u is string => typeof u === "string");
   if (urls.length === 0) throw new ProviderError("Replicate returned no images.");
-  return urls.map((url, i) => ({ url, mime: "image/png", label: `Image ${i + 1} · ${model.id}`, demo: false }));
+  return {
+    jobId: pred.id,
+    outputs: urls.map((url, i) => ({ url, mime: "image/png", label: `Image ${i + 1} · ${model.id}`, demo: false })),
+  };
 }
 
 export function dimensionsFor(aspectRatio: string, quality: string) {
@@ -224,7 +228,8 @@ export async function runImageJob(job: ImageJob): Promise<ProviderResult> {
   const { width, height } = dimensionsFor(job.aspectRatio, job.quality);
 
   if (cfg.replicate) {
-    return { provider: "replicate", demo: false, outputs: await runReplicateImage(job) };
+    const r = await runReplicateImage(job);
+    return { provider: "replicate", demo: false, outputs: r.outputs, jobId: r.jobId };
   }
 
   if (cfg.configured) {
@@ -339,4 +344,73 @@ export function moderatePrompt(prompt: string): { allowed: boolean; reason?: str
     return { allowed: false, reason: "Please write a longer prompt." };
   }
   return { allowed: true };
+}
+
+/**
+ * Replicate image-to-video models. The output clip follows the reference
+ * image's shape, so aspect ratio is not sent. Duration = num_frames / fps.
+ */
+export const REPLICATE_VIDEO_MODELS: Record<string, { id: string; fps: number; minFrames: number; maxFrames: number }> = {
+  "wan-2.2-i2v-fast": { id: "wan-video/wan-2.2-i2v-fast", fps: 16, minFrames: 81, maxFrames: 121 },
+};
+export const DEFAULT_REPLICATE_VIDEO_MODEL = "wan-2.2-i2v-fast";
+
+export function replicateVideoConfigured() {
+  return !process.env["VIDEO_PROVIDER_URL"] && replicateEnv().configured;
+}
+
+function gwHeaders() {
+  const env = replicateEnv();
+  return {
+    Authorization: `Bearer ${env.lovableKey}`,
+    "X-Connection-Api-Key": env.connKey,
+    "Content-Type": "application/json",
+  };
+}
+
+export async function startReplicateVideo(job: {
+  prompt: string;
+  model?: string | null;
+  quality: string;
+  durationSeconds: number;
+  imageUrl: string;
+}) {
+  const key = job.model && REPLICATE_VIDEO_MODELS[job.model] ? job.model : DEFAULT_REPLICATE_VIDEO_MODEL;
+  const model = REPLICATE_VIDEO_MODELS[key]!;
+  const frames = Math.max(model.minFrames, Math.min(model.maxFrames, Math.round(job.durationSeconds * model.fps)));
+  const res = await fetch(`${REPLICATE_GW}/models/${model.id}/predictions`, {
+    method: "POST",
+    headers: gwHeaders(),
+    body: JSON.stringify({
+      input: {
+        image: job.imageUrl,
+        prompt: job.prompt,
+        num_frames: frames,
+        frames_per_second: model.fps,
+        resolution: job.quality === "standard" ? "480p" : "720p",
+        go_fast: true,
+      },
+    }),
+  });
+  if (res.status === 402) {
+    throw new ProviderError("The connected Replicate account has no credit. Add billing at replicate.com/account/billing.");
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`Replicate video create failed [${res.status}]: ${body}`);
+    throw new ProviderError(`Replicate request failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  const pred = (await res.json()) as { id: string };
+  return { jobId: pred.id, modelId: model.id, seconds: Math.round((frames / model.fps) * 10) / 10 };
+}
+
+export async function getReplicatePrediction(id: string) {
+  const res = await fetch(`${REPLICATE_GW}/predictions/${encodeURIComponent(id)}`, { headers: gwHeaders() });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new ProviderError(`Replicate status check failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  const p = (await res.json()) as { status: string; output?: unknown; error?: string | null };
+  const urls = (Array.isArray(p.output) ? p.output : [p.output]).filter((u): u is string => typeof u === "string");
+  return { status: p.status, urls, error: p.error ? String(p.error).slice(0, 300) : null };
 }

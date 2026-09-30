@@ -10,20 +10,21 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { createVideoGeneration } from "@/lib/generation.functions";
-import { ASPECT_RATIOS, QUALITIES, VIDEO_MODELS, type Generation } from "@/lib/types";
+import { checkVideoGeneration, createVideoGeneration } from "@/lib/generation.functions";
+import { VIDEO_MODELS, VIDEO_QUALITIES, type Generation } from "@/lib/types";
 
 const MAX_BYTES = 3_000_000;
 
 export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
   const generate = useServerFn(createVideoGeneration);
+  const check = useServerFn(checkVideoGeneration);
+  const [phase, setPhase] = useState<string>("");
+  const cancelled = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<string>(VIDEO_MODELS[0].value);
-  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
   const [quality, setQuality] = useState<string>("standard");
   const [duration, setDuration] = useState(5);
   const [busy, setBusy] = useState(false);
@@ -31,7 +32,27 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
   const [results, setResults] = useState<Generation[]>([]);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
+  useEffect(() => () => { cancelled.current = true; if (timer.current) clearInterval(timer.current); }, []);
+
+  async function pollUntilDone(id: string): Promise<Generation | null> {
+    const started = Date.now();
+    let failures = 0;
+    while (!cancelled.current && Date.now() - started < 15 * 60_000) {
+      await new Promise((r) => setTimeout(r, Date.now() - started < 30_000 ? 4000 : 8000));
+      try {
+        const res = await check({ data: { id } });
+        if (!res.ok) throw new Error(res.message);
+        failures = 0;
+        const g = res.generation as unknown as Generation & { provider_status?: string };
+        if (g.status === "succeeded" || g.status === "failed") return g;
+        setPhase(g.provider_status === "starting" || g.status === "queued" ? "Queued at Replicate…" : "Processing video…");
+      } catch {
+        failures += 1;
+        if (failures >= 5) throw new Error("Lost contact with the job. Check the Gallery in a minute — it keeps running.");
+      }
+    }
+    return null;
+  }
 
   function readFile(file: File) {
     if (!file.type.startsWith("image/")) {
@@ -49,20 +70,21 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
   }
 
   async function handleGenerate() {
-    if (!prompt.trim()) {
-      toast.error("Describe the motion you want first.");
+    if (!image) {
+      toast.error("Upload a reference image first.");
       return;
     }
     setBusy(true);
-    setProgress(6);
-    timer.current = setInterval(() => setProgress((p) => Math.min(p + 5, 90)), 300);
+    setPhase("Submitting job…");
+    setProgress(4);
+    timer.current = setInterval(() => setProgress((p) => Math.min(p + 1, 94)), 1500);
     try {
       const result = await generate({
         data: {
           prompt: prompt.trim(),
           model,
-          aspectRatio: aspectRatio as "1:1" | "16:9" | "9:16",
-          quality: quality as "standard" | "high" | "ultra",
+          aspectRatio: "auto",
+          quality: quality as "standard" | "high",
           durationSeconds: duration,
           sourceImageUrl: image,
         },
@@ -73,11 +95,22 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
         } else {
           toast.error(result.message ?? "Generation failed");
         }
-      } else {
-        const generation = result.generation as unknown as Generation;
-        setResults((prev) => [generation, ...prev]);
-        toast.success(generation.is_demo ? "Demo motion preview created" : "Video ready");
+        return;
       }
+      let generation = result.generation as unknown as Generation;
+      onComplete();
+      if (result.pending) {
+        setPhase("Queued at Replicate…");
+        const final = await pollUntilDone(generation.id);
+        if (!final) {
+          toast.message("Still rendering — it will appear in your Gallery when finished.");
+          return;
+        }
+        generation = final;
+      }
+      setResults((prev) => [generation, ...prev]);
+      if (generation.status === "failed") toast.error(generation.error ?? "Video failed. Credits refunded.");
+      else toast.success(generation.is_demo ? "DEMO motion preview created" : "Video ready");
       onComplete();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation failed");
@@ -86,15 +119,13 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
       setProgress(100);
       setTimeout(() => setProgress(0), 600);
       setBusy(false);
+      setPhase("");
     }
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
       <div className="panel space-y-5 p-5">
-        <p role="note" className="rounded-lg border border-neon/40 bg-neon/10 px-3 py-2 text-xs text-foreground">
-          Demo only — Image → Video is not connected to a real AI provider yet. Results are labelled placeholders.
-        </p>
         <div className="space-y-2">
           <Label htmlFor="video-upload">Reference image</Label>
           <div
@@ -143,7 +174,7 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
               <div>
                 <Upload className="mx-auto h-6 w-6 text-muted-foreground" />
                 <p className="mt-2 text-sm font-medium">Drop an image or click to browse</p>
-                <p className="text-xs text-muted-foreground">PNG or JPG, up to 3 MB. Optional.</p>
+                <p className="text-xs text-muted-foreground">PNG, JPG or WebP, up to 3 MB. Required.</p>
               </div>
             )}
             <input
@@ -161,7 +192,7 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="motion">Motion instructions</Label>
+          <Label htmlFor="motion">Motion instructions (optional)</Label>
           <Textarea
             id="motion"
             rows={4}
@@ -188,33 +219,16 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label>Aspect ratio</Label>
-          <ToggleGroup
-            type="single"
-            value={aspectRatio}
-            onValueChange={(value) => value && setAspectRatio(value)}
-            className="justify-start gap-2"
-          >
-            {ASPECT_RATIOS.map((ratio) => (
-              <ToggleGroupItem
-                key={ratio.value}
-                value={ratio.value}
-                aria-label={ratio.label}
-                className="rounded-lg border border-border px-3 data-[state=on]:border-neon data-[state=on]:bg-neon/20"
-              >
-                {ratio.value}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Aspect ratio follows your reference image — crop the image first for 16:9, 9:16 or square.
+        </p>
 
         <div className="space-y-2">
           <Label htmlFor="duration">Duration · {duration}s</Label>
           <Slider
             id="duration"
-            min={2}
-            max={12}
+            min={5}
+            max={7}
             step={1}
             value={[duration]}
             onValueChange={([value]) => setDuration(value ?? 5)}
@@ -228,7 +242,7 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {QUALITIES.map((q) => (
+              {VIDEO_QUALITIES.map((q) => (
                 <SelectItem key={q.value} value={q.value}>
                   {q.label}
                 </SelectItem>
@@ -254,7 +268,8 @@ export function ImageToVideoPanel({ onComplete }: { onComplete: () => void }) {
           <div className="flex h-56 items-center justify-center rounded-2xl border border-dashed border-border bg-surface/50">
             <div className="text-center">
               <Loader2 className="mx-auto h-6 w-6 animate-spin text-neon" />
-              <p className="mt-3 text-sm text-muted-foreground">Animating frames…</p>
+              <p className="mt-3 text-sm text-muted-foreground">{phase || "Animating frames…"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Videos usually take 1–3 minutes. You can leave — it will land in your Gallery.</p>
             </div>
           </div>
         ) : null}

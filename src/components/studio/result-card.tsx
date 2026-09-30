@@ -54,12 +54,16 @@ export function ResultCard({
 
       {generation.status === "failed" ? (
         <div className="p-4 text-sm text-destructive">Generation failed: {generation.error ?? "unknown error"}</div>
+      ) : generation.status === "running" || generation.status === "queued" ? (
+        <div className="p-4 text-sm text-muted-foreground" role="status">
+          {generation.status === "queued" ? "Queued" : "Rendering"} at {generation.provider}… this card updates automatically.
+        </div>
       ) : (
         <div className={`grid gap-2 p-3 ${outputs.length > 1 ? "sm:grid-cols-2" : ""}`}>
           {outputs.map((output, index) => (
-            <figure key={index} className={`overflow-hidden rounded-xl border border-border bg-background ${aspectClass(generation.aspect_ratio)}`}>
+            <figure key={index} className={`overflow-hidden rounded-xl border border-border bg-background ${output.mime.startsWith("video/") ? "" : aspectClass(generation.aspect_ratio)}`}>
               {output.mime.startsWith("video/") ? (
-                <video src={output.url} controls className="h-full w-full object-cover" />
+                <video src={output.url} controls playsInline className="h-auto max-h-[70vh] w-full bg-background object-contain" />
               ) : (
                 <img
                   src={output.url}

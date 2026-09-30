@@ -53,6 +53,50 @@ export type Database = {
         }
         Relationships: []
       }
+      generation_charges: {
+        Row: {
+          created_at: string
+          finalized: boolean
+          from_free: number
+          from_purchased: number
+          generation_id: string
+          provider_job_id: string | null
+          refunded: boolean
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          finalized?: boolean
+          from_free?: number
+          from_purchased?: number
+          generation_id: string
+          provider_job_id?: string | null
+          refunded?: boolean
+          usage_date?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          finalized?: boolean
+          from_free?: number
+          from_purchased?: number
+          generation_id?: string
+          provider_job_id?: string | null
+          refunded?: boolean
+          usage_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generation_charges_generation_id_fkey"
+            columns: ["generation_id"]
+            isOneToOne: true
+            referencedRelation: "generations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generations: {
         Row: {
           aspect_ratio: string
@@ -70,6 +114,7 @@ export type Database = {
           outputs: Json
           prompt: string
           provider: string
+          provider_job_id: string | null
           quality: string
           source_image_url: string | null
           status: string
@@ -91,6 +136,7 @@ export type Database = {
           outputs?: Json
           prompt: string
           provider?: string
+          provider_job_id?: string | null
           quality?: string
           source_image_url?: string | null
           status?: string
@@ -112,6 +158,7 @@ export type Database = {
           outputs?: Json
           prompt?: string
           provider?: string
+          provider_job_id?: string | null
           quality?: string
           source_image_url?: string | null
           status?: string
